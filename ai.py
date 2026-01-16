@@ -1,9 +1,18 @@
 from huggingface_hub import InferenceClient
 import json
+import os
 from datetime import datetime
+from dotenv import load_dotenv
 
-# Replace with your Hugging Face API token
-client = InferenceClient(token="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")
+# Load environment variables from .env file
+load_dotenv()
+
+# Get Hugging Face API token from environment variable
+HF_TOKEN = os.getenv("HF_TOKEN")
+if not HF_TOKEN:
+    raise ValueError("HF_TOKEN environment variable not set. Please create a .env file with your token.")
+
+client = InferenceClient(token=HF_TOKEN)
 
 # Test multiple strings to see how scores change
 test_strings = [
