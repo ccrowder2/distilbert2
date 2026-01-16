@@ -9,6 +9,7 @@ load_dotenv()
 
 # Get Hugging Face API token from environment variable
 HF_TOKEN = os.getenv("HF_TOKEN")
+print(HF_TOKEN)
 if not HF_TOKEN:
     raise ValueError("HF_TOKEN environment variable not set. Please create a .env file with your token.")
 

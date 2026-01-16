@@ -1,100 +1,88 @@
 """
-Content Moderation using Pre-trained Models
+Interactive Content Moderation using Pre-trained Models
 Detects spam, scams, toxicity, and harmful content
 """
 
 from huggingface_hub import InferenceClient
+from datetime import datetime
 import json
 import os
-from datetime import datetime
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
+# Load environment variables
 load_dotenv()
-
-# Get Hugging Face API token from environment variable
 HF_TOKEN = os.getenv("HF_TOKEN")
 if not HF_TOKEN:
     raise ValueError("HF_TOKEN environment variable not set. Please create a .env file with your token.")
 
 client = InferenceClient(token=HF_TOKEN)
 
-# Option 1: Use pre-trained toxicity/toxicity model
-# This model detects toxic, obscene, threat, insult, identity_hate
 TOXICITY_MODEL = "unitary/toxic-bert"
+OUTPUT_FILE = "moderation_results.json"
 
-# Option 2: Use spam detection model (if available)
-# Many spam models are available on Hugging Face
+# Load previous results if they exist
+if os.path.exists(OUTPUT_FILE):
+    with open(OUTPUT_FILE, 'r', encoding='utf-8') as f:
+        data_store = json.load(f)
+        results = data_store.get("results", [])
+else:
+    results = []
 
-# Option 3: Use a general moderation model
-# "facebook/roberta-hate-speech-dynabench-r4-target" - hate speech detection
+print("🔍 Interactive Content Moderation")
+print("Type 'exit' to quit.\n")
 
-# Test texts with different types of problematic content
-test_texts = [
-    "Hello, how are you today?",  # Normal
-    "Buy cheap viagra now!!! Click here!!!",  # Spam
-    "You've won $1 million! Click this link to claim!",  # Scam
-    "I hate you and wish you would disappear",  # Toxic
-    "This product is amazing, I love it!",  # Normal
-    "Send me your credit card details for a free gift",  # Scam
-    "Check out this amazing deal at our store",  # Normal (could be spam)
-]
-
-print("🔍 Content Moderation Analysis\n")
-print("=" * 70)
-
-results = []
-
-for text in test_texts:
-    print(f"\n📝 Text: '{text}'")
-    print("-" * 70)
+while True:
+    text = input("📝 Enter text to check: ").strip()
     
-    # Use toxicity detection model
+    if text.lower() in ["exit", "quit"]:
+        break
+    if not text:
+        print("⚠️ Empty input, please type something.")
+        continue
+
     try:
+        # Run moderation model
         toxicity_result = client.text_classification(
             text,
             model=TOXICITY_MODEL
         )
-        
-        # Format and display results
-        if isinstance(toxicity_result, list):
-            # Find highest score
-            top_label = max(toxicity_result, key=lambda x: x['score'])
-            
-            print(f"Toxicity Detection:")
-            print(f"  → {top_label['label']}: {top_label['score']:.4f} ({top_label['score']*100:.1f}%)")
-            
-            # Show all categories
-            for item in toxicity_result:
-                print(f"    • {item['label']}: {item['score']:.4f}")
-            
-            # Determine if problematic
-            is_problematic = top_label['score'] > 0.5 and top_label['label'] != 'non-toxic'
-            
-            if is_problematic:
-                print(f"  ⚠️  FLAG: Potentially harmful content detected")
-            else:
-                print(f"  ✅ CLEAN: Content appears safe")
-            
-            results.append({
-                "text": text,
+
+        # Find highest scoring label
+        top_label = max(toxicity_result, key=lambda x: x['score'])
+        is_problematic = top_label['score'] > 0.5 and top_label['label'] != 'non-toxic'
+
+        # Display results
+        print("\n🎯 Moderation Results:")
+        print(f"  → Top Label: {top_label['label']}")
+        print(f"  → Confidence: {top_label['score']*100:.2f}%")
+        if is_problematic:
+            print("  ⚠️  FLAG: Potentially harmful content detected")
+        else:
+            print("  ✅ CLEAN: Content appears safe")
+
+        # Optional: Show all labels and scores
+        print("\n  • All Scores:")
+        for item in toxicity_result:
+            print(f"    - {item['label']}: {item['score']*100:.2f}%")
+
+        # Save results
+        results.append({
+            "text": text,
+            "model": TOXICITY_MODEL,
+            "results": toxicity_result,
+            "flagged": is_problematic,
+            "timestamp": datetime.now().isoformat()
+        })
+        with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
+            json.dump({
                 "model": TOXICITY_MODEL,
-                "results": toxicity_result,
-                "flagged": is_problematic,
-                "timestamp": datetime.now().isoformat()
-            })
+                "timestamp": datetime.now().isoformat(),
+                "results": results
+            }, f, indent=2, ensure_ascii=False)
+
+        print(f"\n💾 Result saved to {OUTPUT_FILE}")
+        print("="*60 + "\n")
+
     except Exception as e:
-        print(f"  ❌ Error: {str(e)}")
-    
-    print("=" * 70)
-
-# Save results
-output_file = "moderation_results.json"
-with open(output_file, 'w', encoding='utf-8') as f:
-    json.dump({
-        "model": TOXICITY_MODEL,
-        "timestamp": datetime.now().isoformat(),
-        "results": results
-    }, f, indent=2, ensure_ascii=False)
-
-print(f"\n💾 Results saved to {output_file}")
+        print(f"❌ Error during moderation: {str(e)}")
+        print("="*60 + "\n")
